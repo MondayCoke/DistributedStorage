@@ -1,0 +1,20 @@
+package com.gupao.lottery.lotteryredis.service.impl;
+
+import com.gupao.lottery.lotteryredis.dal.model.LotteryRecord;
+import com.gupao.lottery.lotteryredis.dal.mapper.LotteryRecordMapper;
+import com.gupao.lottery.lotteryredis.service.ILotteryRecordService;
+import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import org.springframework.stereotype.Service;
+
+/**
+ * <p>
+ *  服务实现类
+ * </p>
+ *
+ * @author mic
+ * @since 2021-07-01
+ */
+@Service
+public class LotteryRecordServiceImpl extends ServiceImpl<LotteryRecordMapper, LotteryRecord> implements ILotteryRecordService {
+
+}
