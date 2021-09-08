@@ -1,0 +1,10 @@
+#org.springframework.boot.env.EnvironmentPostProcessor=\
+#  com.example.springbootzookeeper.CustomEnvironmentPostProcessor
+
+
+org.springframework.context.ApplicationContextInitializer=\
+  com.example.springbootzookeeper.config.ZookeeperApplicationContextInitializer
+
+com.example.springbootzookeeper.config.PropertySourceLocator=\
+  com.example.springbootzookeeper.config.ZookeeperPropertySourceLocator,\
+  com.example.springbootzookeeper.config.LocalCustomPropertySourceLocator
