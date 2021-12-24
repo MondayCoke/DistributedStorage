@@ -2,7 +2,6 @@ package com.gupaoedu.example.zookeepercuratorapplication;
 
 import org.apache.curator.framework.CuratorFramework;
 import org.apache.curator.framework.CuratorFrameworkFactory;
-import org.apache.curator.framework.recipes.locks.InterProcessMutex;
 import org.apache.curator.retry.ExponentialBackoffRetry;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -20,7 +19,7 @@ public class CuratorConfig {
     public CuratorFramework curatorFramework(){
         CuratorFramework curatorFramework=CuratorFrameworkFactory
                 .builder()
-                .connectString("192.168.221.128:2181")
+                .connectString("47.107.45.58:2181")
                 .sessionTimeoutMs(15000)
                 .connectionTimeoutMs(20000)
                 .retryPolicy(new ExponentialBackoffRetry(1000,10))

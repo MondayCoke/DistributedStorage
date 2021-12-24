@@ -4,20 +4,16 @@ package com.gupaoedu.example.zookeepercuratorapplication.controller;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.gupaoedu.example.zookeepercuratorapplication.dal.model.GoodsStock;
 import com.gupaoedu.example.zookeepercuratorapplication.service.IGoodsStockService;
-import com.gupaoedu.example.zookeepercuratorapplication.service.impl.GoodsStockServiceImpl;
 import org.apache.curator.framework.CuratorFramework;
 import org.apache.curator.framework.recipes.locks.InterProcessMutex;
-import org.apache.curator.framework.recipes.locks.Revoker;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Scope;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
-
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.Random;
-import java.util.concurrent.TimeUnit;
 
 /**
  * <p>

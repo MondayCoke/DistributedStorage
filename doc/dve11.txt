@@ -1,0 +1,651 @@
+1.jdk1.7到jdk1.8 Map发生了什么变化(底层)?
+    1.8之后hashMap的数据结构发生了变化，从之前的单纯的数组+链表结构变成数组+链表+红黑树。
+    也就是说在JVM存储hashMap的K-V时仅仅通过key来决定每一个entry的存储槽位（Node[]中的index）。
+    并且Value以链表的形式挂在到对应槽位上（1.8以后如果value长度大于8则转为红黑树）。
+    但是hashmap1.7跟1.8 中都没有任何同步操作，容易出现并发问题，甚至出现死循环导致系统不可用。
+    解决方案是jdk的ConcurrentHashMap，位于java.util.concurrent下，专门解决并发问题。
+
+2.ConcurrentHashMap
+    思路与hashMap差不多，但是支持并发操作，要复杂很多
+
+3.并行跟并发有什么区别？
+    并发：指应用交替执行不同的任务，多线程原理
+    并行：指应用同时执行不用的任务
+    区别：一个是交替执行，一个是同时执行。
+
+4.jdk1.7到jdk1.8 java虚拟机发生了什么变化?
+    JVM中内存分为堆、栈内存，及方法区。
+    栈内存主要用途：执行线程方法，存放本地临时变量与线程方法执行是需要的引用对象的地址。
+    堆内存主要用途：JVM中所有对象信息都存放在堆内存中，相比栈内存，堆内存大很多所以JVM一直通过对堆内存划分不同功能区块实现对堆内存中对象管理。
+    堆内存不够常见错误：OutOfMemoryError
+    栈内存溢出常见错误：StackOverFlowError
+    在JDK7以及其前期的JDK版本中，堆内存通常被分为三块区域Nursery内存(young generation)、长时内存(old generation)、永久内存(Permanent Generation for VM Matedata)，显示如下图：
+
+
+    在最上面一层是Nursery内存，一个对象被创建以后首先被房到Nuersery中的Eden内存中，如果存活周期超过两个Survivor（生存周期）之后会被转移到Old Generation中。
+    永久内存中存放对象的方法、变量等元数据信息。永久内存不够就会出现 以下错误：java.lang.OutOfMemoryError:PermGen
+    但是在JDK1.8中一般都不会得到这个错误，原因在于：1.8中把存放元数据的永久内存从堆内存中已到了本地内存（native Memory）中，1.8中JVM内存结构变成了如下图：
+
+    这样永久内存就不占用堆内存，可以通过自增长来避免永久内存错误。
+    -XX:MaxMetaspaceSize=128m 这只最大的远内存空间128兆
+    JDK1.8移除PermGen，取而代之的是MetaSpace源空间
+    MetaSpace 垃圾回收：对僵死的类及类加载器的垃圾回收机制昂在元数据使用达到“MaxMetaSpaceSize”参数的设定值时运行。
+    MetaSpace 监控：元空间的使用情况可以在HotSpot1.8的详细GC日志输出中得到。
+
+    更新JDK1.8的原因：
+    1.字符串存在永久代当中，容易出现性能问题和内存溢出
+    2.类及方法的信息比较难确定其大小，因此对永久代的大小制定比较困难，太小容易出现永久代溢出，太大则容易导致老年代溢出。
+    3.永久代会为GC带来不必要的复杂度，并且回收效率偏低
+    4.Oracle可能会想HotSpot 与 JRockit 合并。
+
+5.如果叫你自己设计一个中间件,你会如何设计?
+    我会从以下几点方面考虑开发：
+    1)远程过程调用
+    2)面向消息：利用高效的消息传递机制进行平台无关的数据交流，并给予数据通信来进行分布式系统的集成，有一下三个特点：
+        i)通讯程序可以在不同的时间运行
+        ii)通讯程序之下可以一对一、一对多、多对一甚至是上述多种方式的混合
+        iii)程序将消息放入消息队列会从消息队列中取出消息来进行通讯
+    3)对象请求代理：提供不同形式的通讯服务包括同步、排队、订阅发布、广播等。可构筑各种框架如：事物处理监控器、分布数据访问、对象事务管理器OTM等。
+    4)事物处理监控有一下功能：
+        a)进程管理，包括启动server进程、分配任务、监控其执行并对负载进行平衡
+        b)事务管理，保证在其监控下的事务处理的原子性、一致性、独立性和持久性
+        c)通讯管理，为client和server之间提供多种通讯机制，包括请求响应、会话、排队、订阅发布和广播等
+6.什么是中间件？
+    中间件是处于操作系统和应用程序之间软件，使用时往往是一组中间件集成在一起，构成一个平台（开发平台+运行平台），
+    在这组中间件中必须要有一个通信中间件，即中间件=平台+通信。该定义也限定了只有用于分布式系统中才能称为中间件
+    主要分类：远程过程调用、面向消息的中间件、对象请求代理、事务处理监控。
+
+7.ThreadLock用过没有,说说它的作用?
+    ThreadLock为本地线程，为每一个线程提供一个局部变量，也就是说只有当前线层可以访问，是线程安全的。
+    原理：为每一个线程分配一个对象来工作，并不是由ThreadLock来完成的，而是需要在应用层面保证的，ThreadLock只是起到了一个容器的作用。
+    原理为ThreadLock的set()跟get()方法。
+    实现原理：
+    public void set(T value) {
+            Thread t = Thread.currentThread();
+            ThreadLocalMap map = getMap(t);
+            if (map != null)
+                map.set(this, value);
+            else
+                createMap(t, value);
+        }
+    public T get() {
+            Thread t = Thread.currentThread();
+            ThreadLocalMap map = getMap(t);
+            if (map != null) {
+                ThreadLocalMap.Entry e = map.getEntry(this);
+                if (e != null)
+                    return (T)e.value;
+            }
+            return setInitialValue();
+        }
+
+8.dubbox和spring cloud区别?
+9.dubbox的源码看过没,dubbox有哪些组件,介绍下?
+
+10.Hashcode（）和equals（）和==区别?
+    (1)hashcode()方法跟equals()在java中都是判断两个对象是否相等
+    (2)两个对象相同，则hashcode至一定要相同，即对象相同 ---->成员变量相同 ---->hashcode值一定相同
+    (3)两个对象的hashcode值相同，对象不一定相等。总结：equals相等则hashcode一定相等，hashcode相等，equals不一定相等。
+    (4)==比较的是两个引用在内存中指向的是不是同一对象（即同一内存空间）
+
+11.mysql数据库中,什么情况下设置了索引但无法使用?
+    (1)索引的作用：在数据库表中对字段建立索引可以大大提高查询速度。
+    (2)Mysql索引类型：
+        a)普通索引
+        b)唯一索引：唯一索引列的值必须唯一允许有空值，如果是组合索引，则列值的组合必须唯一：
+            CREATE UNIQUE INDEX indexName ON mytable(username(length))
+            -- 修改表结构
+            ALTER mytable ADD UNIQUE [indexName] ON (username(length))
+            -- 创建表的时候直接指定
+            CREATE TABLE mytable(ID INT NOT NULL, username VARCHAR(16) NOT NULL,UNIQUE [indexName] (username(length)) );
+        c)主键索引：一种特殊的唯一索引，不允许有空值，一般在创建表的时候创建主键索引：
+            CREATE TABLE mytable( ID INT NOT NULL, username 	VARCHAR(16) NOT NULL, PRIMARY KEY(ID) );
+        d)组合索引：CREATE TABLE mytable( ID INT NOT NULL, username VARCHAR(16) NOT NULL, city VARCHAR(50) NOT NULL, age INT NOT NULL );
+            为了进一步榨取MySQL的效率，就要考虑建立组合索引。就是	将 name, city, age建到一个索引里：代码如下:
+            ALTER TABLE 	mytable ADD INDEX name_city_age 		(name(10),city,age);
+            遵循最左侧原则，从左到右的使用索引中的字段，一个查询可以只使用索引中的一部份，但只能是最左侧部分。
+    (3)什么情况下有索引，但用不上？
+        a)如果条件中有OR，即使其中有部分条件带索引也不会使用。注意：要想使用or，又想让索引生效，只能将or条件中的每个列都加上索引。
+        b)对于多了索引，不是使用的第一部分，则不会使用索引。
+        c)Like查询以%开头，不使用索引
+        d)存在索引列的数据类型隐形转换，则用不上索引，比如列类型是字符串，那一定要在条件中将数据使用引号引用起来,否则不使用索引
+        e)Where 子句里对索引列上有数学运算，用不上索引
+        f)Where 子句中对索引列使用函数，用不上索引
+        g)Mysql估计使用全表扫描要比用索引快，不使用索引
+    (4)什么情况下不推荐使用索引？
+        a)数据唯一性差的字段不要使用索引
+        b)频繁更新的字段不要使用索引
+        c)字段不在where语句中出现时不要添加索引，如果where后含IS NULL/IS NOT NULL/LIKE ‘%输入符%’等条件，不要使用索引
+        d)Where子句里对索引使用不等于（<>），不建议使用索引，效果一般
+12.mysql优化会不会,mycat分库,垂直分库,水平分库?
+    (1)为查询缓存优化你的查询
+    (2)EXPLAIN select查询：explain 的查询结果会告诉你索引主键是如何被利用的
+    (3)只需要一行数据时使用limit1
+    (4)为搜索字段添加索引
+    (5)在关联表的时候使用相当类型的例，并将其索引
+    (6)千万不要ORDER BY RAND()
+    (7)避免select*
+    (8)永远为每张表设置一个ID
+    (9)使用ENUM而不是VARCHAR
+    (10)从PROCEDURE ANALYS()提取建议
+    (11)尽可能的使用NOT NULL
+    (12)Java中使用Prepared Statements
+    (13)无缓冲的查询
+    (14)把IP地址存成UNSIGNED INT
+    (15)固定表的长度
+    (16)垂直分库：“垂直分割”是一种把数据库中的表按列变成几张表的方法，这样可以降低表的复杂度和字段的数目，从而达到优化的目的。
+    (17)水平分库：“水平分割”是一种把数据库中的表按行变成几张表的方法，这样可以降低表的复杂度和字段的数目，从而达到优化的目的。
+    (18)越小的列会越快
+    (19)选择正确的存储引擎
+    (20)使用一个对象关系映射器
+    (21)小心永久链接
+    (22)拆分大的DELETE活INSERT语句
+13.分布式事务解决方案?
+    (1)什么是分布式事务？
+        a.什么情况下需要用到分布式事务？
+        a)当本地数据库断电、机器宕机、网络异常、消息丢失、消息乱序、数据错误、不可靠TCP、存储数据丢失、其他异常等需要用到分布式事务。
+        b)例如：当本地事务数据库断电的这种秦光，如何保证数据一致性？
+            数据库由连个文件组成的，一个数据库文件和一个日志文件，数据库任何写入操作都要先写日志，在操作前会吧日志文件写入磁盘，那么断电的时候及时才做没有完成，
+            在重启数据库的时候，数据库会根据当前数据情况进行undo回滚活redo前滚，保证了数据的强一致性。
+        c)分布式理论：当单个数据库性能产生瓶颈的时候，可能会对数据库进行分区（物理分区），分区之后不同的数据库不同的服务器上	，此时单个数据库的ACID不适应这种清苦啊，在此集群环境下很难达到集群的ACID，甚至效率性能大幅度下降，重要的是再很难扩展新的分区了。此时就需要引用一个新的理论来使用这种集群情况：CAP定理
+        d)CAP定理:由加州肚饿伯克利分销Eric Brewer教授提出，指出WEB服务无法同时满足3个属性：
+            a.一致性：客户端知道一系列的操作都会同时发生（生效）
+            b.可用性：每个操作都必须以可预期的响应结束
+            c.分区容错性：及时出现单组件无法可用，操作依然可以完成。
+        具体的将在分布式系统中，在任何数据库设计中，一个WEB应用至多只能同时支持上面两个属性。设计人员必须在一致性和可用性之间做出选择。
+        e)BASE理论：分布式系统中追求的是可用性，比一致性更加重要，BASE理论来实现高可用性。核心思想是：我们无法做到羟乙酯，单每个应用都可以根据自身的业务特点，采用适当的方式使系统达到最终一致性。
+        f)数据库事务特性：ACID
+            i.原子性
+            ii.一致性
+            iii.独立性或隔离性
+            iv.持久性
+    (2)分布式系统中，实现分布式事务的解决方案：
+        a.两阶段提交2PC
+        b.补偿事务TCC
+        c.本地消息表（异步确保）
+        d.MQ事务消息
+        e.Sagas事务模型
+14.sql语句优化会不会,说出你知道的?
+    (1)避免在列上做运算，可能会导致索引失败
+    (2)使用join时应该小结果集驱动大结果集，同时把复杂的join查询拆分成多个query，不然join越多表，会导致越多的锁定和堵塞。
+    (3)注意like模糊查询的使用，避免使用%%
+    (4)不要使用select * 节省内存
+    (5)使用批量插入语句，节省交互
+    (6)Limit基数比较大时，使用between  and
+    (7)不要使用rand函数随机获取记录
+    (8)避免使用null，建表时，尽量设置not nul，提高查询性能
+    (9)不要使用count（id），应该使用count（*）
+    (10)不要做无谓的排序，尽可能在索引中完成排序
+    (11)From语句中一定不要使用子查询
+    (12)使用更多的where加以限制，缩小查找范围
+    (13)合理运用索引
+    (14)使用explain查看sql性能
+
+16.红黑树原理？
+(1)红黑树的性质：红黑树是一个二叉搜索树。在每个节点增加了一个存储位记录节点的颜色，可以是RED，也可以是BLACK，
+通过任意一条从根到叶子简单路径上颜色的约束，红黑树保证最长路径不超过最短路径的两倍，加以平衡。性质如下：
+    i.每个节点颜色不是黑色就是红色
+    ii.根节点的颜色是黑色的
+    iii.如果一个节点是红色，那么他的两个子节点就是黑色的，没有持续的红节点
+    iv.对于每个节点，从该节点到其后代叶节点的简单路径上，均包含相同数目的黑色节点。
+
+
+1  什么是Spring框架？Spring框架有哪些主要模块？
+    Spring框架是一个为Java应用程序开发提供综合、广泛的基础性支持的Java平台。
+    Spring帮助开发者解决了开发中基础性的问题，使得开发人员可以专注于应用程序的开发。
+    Spring框架本身也是按照设计模式精心打造，这使得我们可以在开发环境中安心地集成Spring框架，不必担心Spring是如何在后台工作的。
+    Spring大约18个基本模块，大致分为4类；分别是核心模块、AOP、数据访问、Web模块、测试模块。
+        核心模块包括：core、beans、context、context-support、expression共5个模块；
+        AOP模块包括：aop、aspects、instrument共3个模块；
+        数据访问模块包括：jdbc、tx、orm、oxm共4个模块；
+        Web模块包括：web、webmvc、websocket、webflux共4个模块；
+        集成测试模块：test模块。
+
+2  使用Spring框架能带来哪些好处？
+    下面列举了一些使用Spring框架带来的主要好处。
+    （1）Dependency Injection(DI) 方法使得构造器和JavaBean properties文件中的依赖关系一目了然。
+    （2）与EJB容器相比较，IOC容器更加趋向于轻量级。这样一来IOC容器在有限的内存和CPU资源的情况下进行应用程序的开发和发布就变得十分有利。
+    （3）Spring并没有闭门造车，Spring利用了已有的技术，比如ORM框架、logging框架、J2EE、Quartz和JDK Timer，以及其他视图技术。
+    （4）Spring框架是按照模块的形式来组织的。由包和类的编号就可以看出其所属的模块，开发者只需选用他们需要的模块即可。
+    （5）要测试一项用Spring开发的应用程序十分简单，因为测试相关的环境代码都已经囊括在框架中了。更加简单的是，利用JavaBean形式的POJO类，可以很方便地利用依赖注入来写入测试数据。
+    （6）Spring的Web框架也是一个精心设计的Web MVC框架，为开发者们在Web框架的选择上提供了一个除主流框架比如Struts、过度设计的、不流行Web框架以外的选择。
+    （7）Spring提供了一个便捷的事务管理接口，适用于小型的本地事务处理（比如在单DB的环境下）和复杂的共同事务处理（比如利用JTA的复杂DB环境）。
+
+3  什么是控制反转（IOC）？什么是依赖注入？
+    （1）控制反转是应用于软件工程领域的，在运行时被装配器对象用来绑定耦合对象的一种编程技巧，对象之间的耦合关系在编译时通常是未知的。
+    在传统的编程方式中，业务逻辑的流程是由应用程序中早已被设定好关联关系的对象来决定的。在使用控制反转的情况下，业务逻辑的流程是由对象关系图来决定的，
+    该对象关系图由装配器负责实例化，这种实现方式还可以将对象之间的关联关系的定义抽象化。绑定的过程是通过“依赖注入”实现的。
+    （2）控制反转是一种以给予应用程序中目标组件更多控制为目的设计范式，并在我们的实际工作中起到了有效的作用。
+    （3）依赖注入是在编译阶段尚未知所需的功能是来自哪个的类的情况下，将其他对象所依赖的功能对象实例化的模式。
+    这就需要一种机制用来激活相应的组件以提供特定的功能，所以依赖注入是控制反转的基础。否则如果在组件不受框架控制的情况下，框架又怎么知道要创建哪个组件呢？
+4  在Java中依赖注入有哪些方式？
+    （1）构造器注入。
+    （2）Setter方法注入。
+    （3）接口注入。
+5  BeanFactory和ApplicationContext有什么区别？
+    BeanFactory 可以理解为含有Bean集合的工厂类。BeanFactory 包含了bean的定义，以便在接收到客户端请求时将对应的Bean实例化。
+    BeanFactory还能在实例化对象时生成协作类之间的关系。此举将Bean自身从Bean客户端的配置中解放出来。BeanFactory还包含Bean生命周期的控制，
+    调用客户端的初始化方法（initialization Methods）和销毁方法（destruction Methods）。
+    从表面上看，ApplicationContext如同Bean Factory一样具有Bean定义、Bean关联关系的设置，以及根据请求分发Bean的功能。但ApplicationContext在此基础上还提供了其他功能。
+        （1）提供了支持国际化的文本消息。
+        （2）统一的资源文件读取方式。
+        （3）已在监听器中注册的Bean的事件。
+    以下是三种较常见的 ApplicationContext 实现方式。
+        （1）ClassPathXmlApplicationContext：从classpath的XML配置文件中读取上下文，并生成上下文定义。应用程序上下文从程序环境变量中取得。
+        ApplicationContext context = new ClassPathXmlApplicationContext(“application.xml”);
+
+        （2）FileSystemXmlApplicationContext ：由文件系统中的XML配置文件读取上下文。
+        ApplicationContext context = new FileSystemXmlApplicationContext(“application.xml”);
+
+        （3）XmlWebApplicationContext：由Web应用的XML文件读取上下文。
+
+    ApplicationContext继承了BeanFactory，BeanFactory是Spring中比较原始的Factory，它不支持AOP、Web等Spring插件，
+    而ApplicationContext不仅包含了BeanFactory的所有功能，还支持Spring的各种插件，还以一种面向框架的方式工作以及对上下文进行分层和实现继承。
+    BeanFactory是Spring框架的基础设施，面向Spring本身；而ApplicationContext面向使用Spring的开发者，相比BeanFactory提供了更多面向实际应用的功能，
+    几乎所有场合都可以直接使用ApplicationContext而不是底层的BeanFactory
+
+6  Spring提供几种配置方式来设置元数据？
+    将Spring配置到应用开发中有以下三种方式：
+    （1）基于XML的配置。
+    （2）基于注解的配置。
+    （3）基于Java的配置。
+
+7  如何使用XML配置的方式配置Spring？
+    在Spring框架中，依赖和服务需要专门的配置文件中实现，我一般用XML格式的配置文件。这些配置文件的格式采用通公共的模板，由一系列的Bean定义和专门的应用配置选项组成。
+    Spring XML配置的主要目的是使所有的Spring组件都可以用XML文件的形式来进行配置。这意味着不会出现其他的Spring配置类型（比如声明的方式或基于Java Class的配置方式）。
+    Spring的XML配置方式是使用被Spring命名空间所支持的一系列的XML标签来实现的。Spring有以下主要的命名空间：context、beans、jdbc、tx、aop、mvc和aso。
+    <beans>
+       <!-- JSON Support -->
+       <bean name="viewResolver"
+            class="org.springframework.web.servlet.view.BeanNameViewResolver"/>
+       <bean name="jsonTemplate"
+            class="org.springframework.web.servlet.view.json.MappingJackson2JsonView"/>
+       <bean id="restTemplate" class="org.springframework.web.client.RestTemplate"/>
+    </beans>
+
+    下面这个web.xml仅配置了DispatcherServlet，这最简单的配置便能满足应用程序配置运行时组件的需求。
+    <web-app>
+       <display-name>Archetype Created Web Application</display-name>
+       <servlet>
+          <servlet-name>spring</servlet-name>
+          <servlet-class>
+             org.springframework.web.servlet.DispatcherServlet
+          </servlet-class>
+          <load-on-startup>1</load-on-startup>
+       </servlet>
+       <servlet-mapping>
+          <servlet-name>spring</servlet-name>
+          <url-pattern>/</url-pattern>
+       </servlet-mapping>
+    </web-app>
+
+8  Spring提供哪些配置形式？
+    Spring对Java配置的支持是由@Configuration注解和@Bean注解来实现的。由@Bean注解的方法将会实例化、配置和初始化一个新对象，这个对象将由Spring的IOC容器来管理。
+    @Bean声明所起到的作用与元素类似。被@Configuration所注解的类则表示这个类的主要目的是作为Bean定义的资源。
+    被@Configuration声明的类可以通过在同一个类的内部调用@bean方法来设置嵌入Bean的依赖关系。
+    最简单的@Configuration 声明类请参考下面的代码：
+    @Configuration
+    public class AppConfig{
+       @Bean
+       public MyService myService() {
+          return new MyServiceImpl();
+       }
+    }
+
+    与上面的@Beans配置文件相同的XML配置文件如下：
+    <beans>
+       <bean id="myService" class="com.gupaoedu.services.MyServiceImpl"/>
+    </beans>
+    上述配置方式的实例化方式如下：
+    public static void main(String[] args) {
+       ApplicationContext ctx = new AnnotationConfigApplicationContext(AppConfig.class);
+       MyService myService = ctx.getBean(MyService.class);
+       myService.doStuff();
+    }
+
+    要使用组件组建扫描，仅需用@Configuration进行注解即可：
+    @Configuration
+    @ComponentScan(basePackages = "com.gupaoedu")
+    public class AppConfig  {
+    }
+
+    在上面的例子中，com.gupaoedu包首先会被扫描到，然后在容器内查找被@Component 声明的类，找到后将这些类按照Spring Bean定义进行注册。
+    如果你要在Web应用开发中选用上述配置方式，需要用AnnotationConfigWebApplicationContext类来读取配置文件，可以用来配置Spring的Servlet监听器ContrextLoaderListener或者Spring MVC的DispatcherServlet。
+    <web-app>
+       <context-param>
+          <param-name>contextClass</param-name>
+          <param-value>
+             org.springframework.web.context.support.AnnotationConfigWebApplicationContext
+          </param-value>
+       </context-param>
+       <context-param>
+          <param-name>contextConfigLocation</param-name>
+          <param-value>com.gupaoedu.AppConfig</param-value>
+       </context-param>
+       <listener>
+          <listener-class>org.springframework.web.context.ContextLoaderListener</listener-class>
+       </listener>
+       <servlet>
+          <servlet-name>dispatcher</servlet-name>
+          <servlet-class>org.springframework.web.servlet.DispatcherServlet</servlet-class>
+          <init-param>
+             <param-name>contextClass</param-name>
+             <param-value>
+                org.springframework.web.context.support.AnnotationConfigWebApplicationContext
+             </param-value>
+          </init-param>
+          <init-param>
+             <param-name>contextConfigLocation</param-name>
+             <param-value>com.gupaoedu.web.MVCConfig</param-value>
+          </init-param>
+       </servlet>
+       <servlet-mapping>
+          <servlet-name>dispatcher</servlet-name>
+          <url-pattern>/web/*</url-pattern>
+       </servlet-mapping>
+    </web-app>
+
+9  怎样用注解的方式配置Spring？
+    Spring在2.5版本以后开始支持用注解的方式来配置依赖注入。
+    可以用注解的方式来替代XML方式的Bean描述，可以将Bean描述转移到组件类的内部，只需要在相关类上、方法上或者字段声明上使用注解即可。
+    注解注入将会被容器在XML注入之前处理，所以后者会覆盖前者对于同一个属性的处理结果。
+    注解装配在Spring中是默认关闭的，需要在Spring文件中配置一下才能使用基于注解的装配模式。如果你想要在应用程序中使用注解的方式，请参考如下配置：
+    <beans>
+       <context:annotation-config/>
+    </beans>
+
+    标签配置完成以后，就可以用注解的方式在Spring中向属性、方法和构造方法中自动装配变量。
+    下面是几种比较重要的注解类型。
+    （1）@Required：该注解应用于设值方法。
+    （2）@Autowired：该注解应用于有值设值方法、非设值方法、构造方法和变量。
+    （3）@Qualifier：该注解和@Autowired注解搭配使用，用于消除特定Bean自动装配的歧义。
+    （4）JSR-250 Annotations：Spring支持基于JSR-250 注解的注解，@Resource、@PostConstruct 和 @PreDestroy。
+
+10  请解释Spring Bean的生命周期？
+    Spring Bean的生命周期简单易懂。
+    在一个Bean实例被初始化时，需要执行一系列初始化操作以达到可用的状态。同样，当一个Bean不再被调用时需要进行相关的析构操作，并从Bean容器中移除。
+    Spring Bean Factory 负责管理在Spring容器中被创建的Bean的生命周期。Bean的生命周期由两组回调方法组成。
+        （1）初始化之后调用的回调方法。
+        （2）销毁之前调用的回调方法。
+    Spring框架提供了以下四种方式来管理Bean的生命周期事件：
+    （1）InitializingBean和DisposableBean回调接口。
+    （2）针对特殊行为的其他Aware接口。
+    （3）Bean配置文件中的Custom init()方法和destroy()方法。
+    （4）@PostConstruct和@PreDestroy注解方式。
+    使用customInit()和 customDestroy()方法管理Bean生命周期的代码样例如下：
+    <beans>
+       <bean id="demoBean" class="com.gupaoedu.task.DemoBean"
+            init-Method="customInit" destroy-Method="customDestroy">
+       </bean>
+    </beans>
+
+11  Spring Bean作用域的区别是什么？
+    Spring容器中的Bean可以分为5个范围。所有范围的名称都是自说明的，但是为了避免混淆，还是让我们来解释一下。
+    （1）singleton：这种Bean范围是默认的，这种范围确保不管接收到多少个请求，每个容器中只有一个Bean的实例，单例的模式由Bean Factory自身来维护。
+    （2）prototype：原形范围与单例范围相反，为每一个Bean请求提供一个实例。
+    （3）request：在请求Bean范围内为每一个来自客户端的网络请求创建一个实例，在请求完成以后，Bean会失效并被垃圾回收器回收。
+    （4）Session：与请求范围类似，确保每个Session中有一个Bean的实例，在Session过期后，Bean会随之失效。
+    （5）global-session：global-session和Portlet应用相关。当你的应用部署在Portlet容器中时，它包含很多portlet。
+    如果你想要声明让所有的portlet共用全局的存储变量，那么这个全局变量需要存储在global-session中。
+    全局作用域与Servlet中的Session作用域效果相同。
+
+12  什么是Spring Inner Bean？
+    在Spring框架中，无论何时Bean被使用时，当仅被调用了一个属性，一个明智的做法是将这个Bean声明为内部Bean。
+    内部Bean可以用setter注入“属性”和用构造方法注入“构造参数”的方式来实现。
+    比如，在我们的应用程序中，一个Customer类引用了一个Person类，我们要做的是创建一个Person的实例，然后在Customer内部使用。
+    public class Customer{
+       private Person person;
+    }
+    public class Person{
+       private String name;
+       private String address;
+       private int age;
+    }
+
+    内部Bean的声明方式如下：
+    <bean id="CustomerBean" class="com.gupaoedu.common.Customer">
+       <property name="person">
+          <bean class="com.gupaoedu.common.Person">
+             <property name="name" value="lokesh" />
+             <property name="address" value="India" />
+             <property name="age" value="34" />
+          </bean>
+       </property>
+    </bean>
+13  Spring框架中的单例Bean是线程安全的吗？
+    Spring框架并没有对单例Bean进行任何多线程的封装处理。关于单例Bean的线程安全和并发问题需要开发者自行搞定。
+    但实际上，大部分Spring Bean并没有可变的状态（比如Serview类和DAO类），所以在某种程度上说，Spring的单例Bean是线程安全的。
+    如果你的Bean有多种状态（比如View Model对象），就需要自行保证线程安全。
+    最浅显的解决办法就是将多态Bean的作用域由“singleton”变更为“prototype”。
+
+14  请举例说明如何在Spring中注入一个Java 集合？
+    Spring提供了以下四种集合类的配置元素：
+    （1）<list>标签用来装配可重复的list值。
+    （2）<set>标签用来装配没有重复的set值。
+    （3）<map>标签可用来注入键和值，可以为任何类型的键值对。
+    （4）<props>标签支持注入键和值都是字符串类型的键值对。
+    下面看一下具体的例子：
+    <beans>
+       <bean id="javaCollection" class="com.gupaoedu.JavaCollection">
+          <property name="customList">
+             <list>
+                <value>INDIA</value>
+                <value>Pakistan</value>
+                <value>USA</value>
+                <value>UK</value>
+             </list>
+          </property>
+          <property name="customSet">
+             <set>
+                <value>INDIA</value>
+                <value>Pakistan</value>
+                <value>USA</value>
+                <value>UK</value>
+             </set>
+          </property>
+          <property name="customMap">
+             <map>
+                <entry key="1" value="INDIA"/>
+                <entry key="2" value="Pakistan"/>
+                <entry key="3" value="USA"/>
+                <entry key="4" value="UK"/>
+             </map>
+          </property>
+          <property name="customProperies">
+             <props>
+                <prop key="admin">admin@gupaoedu.com</prop>
+                <prop key="support">support@gupaoedu.com</prop>
+             </props>
+          </property>
+       </bean>
+    </beans>
+15  如何向Spring Bean中注入java.util.Properties？
+    第一种方法是使用如下面代码所示的标签：
+    <bean id="adminUser" class="com.gupaoedu.common.Customer">
+       <property name="emails">
+          <props>
+             <prop key="admin">admin@gupaoedu.com</prop>
+             <prop key="support">support@gupaoedu.com</prop>
+          </props>
+       </property>
+    </bean>
+
+    也可用“util:”命名空间来从properties文件中创建一个propertiesBean，然后利用setter方法注入Bean的引用。
+
+16  请解释Spring Bean的自动装配？
+    在Spring框架中，在配置文件中设定Bean的依赖关系是一个很好的机制，Spring容器还可以自动装配合作关系Bean之间的关联关系。
+    这意味着Spring可以通过向Bean Factory中注入的方式自动搞定Bean之间的依赖关系。自动装配可以设置在每个Bean上，也可以设定在特定的Bean上。
+    下面的XML配置文件表明了如何根据名称将一个Bean设置为自动装配：
+    <bean id="employeeDAO" class="com.gupaoedu.EmployeeDAOImpl" autowire="byName" />
+
+    除了Bean配置文件中提供的自动装配模式，还可以使用@Autowired注解来自动装配指定的Bean。在使用@Autowired注解之前需要按照如下的配置方式在Spring配置文件中进行配置。
+    <context:annotation-config />
+
+    也可以通过在配置文件中配置AutowiredAnnotationBeanPostProcessor 达到相同的效果。
+    <bean class ="org.springframework.beans.factory.annotation.AutowiredAnnotationBeanPostProcessor"/>
+    配置好以后就可以使用@Autowired来标注了。
+    @Autowired
+    public EmployeeDAOImpl (EmployeeManager manager ) {
+          this.manager = manager;
+    }
+
+17  自动装配有哪些局限性？
+    自动装配有如下局限性。
+    重写：你仍然需要使用和< property>设置指明依赖，这意味着总要重写自动装配。
+    原生数据类型：你不能自动装配简单的属性，如原生类型、字符串和类。
+    模糊特性：自动装配总是没有自定义装配精确，因此如果可能尽量使用自定义装配。
+
+18  请解释各种自动装配模式的区别？
+    在Spring框架中共有5种自动装配，让我们逐一分析。
+    （1）no：这是Spring框架的默认设置，在该设置下自动装配是关闭的，开发者需要自行在Bean定义中用标签明确地设置依赖关系。
+    （2）byName：该选项可以根据Bean名称设置依赖关系。当向一个Bean中自动装配一个属性时，容器将根据Bean的名称自动在配置文件中查询一个匹配的Bean。如果找到就装配这个属性，如果没找到就报错。
+    （3）byType：该选项可以根据Bean类型设置依赖关系。当向一个Bean中自动装配一个属性时，容器将根据Bean的类型自动在配置文件中查询一个匹配的Bean。如果找到就装配这个属性，如果没找到就报错。
+    （4）constructor：它的自动装配和byType模式类似，但是仅适用于有与构造器相同参数的Bean，如果在容器中没有找到与构造器参数类型一致的Bean，那么将会抛出异常。
+    （5）autodetect：该模式自动探测使用构造器自动装配或者byType自动装配。首先会尝试找合适的带参数的构造器，如果找到就是用构造器自动装配，如果在Bean内部没有找到相应的构造器或者是无参构造器，容器就会自动选择byTpe的自动装配方式。
+19  请举例解释@Required Annotation？
+    在产品级别的应用中，IOC容器可能声明了数十万了Bean，Bean与Bean之间有着复杂的依赖关系。
+    设值注解方法的短板之一就是验证所有的属性是否被注解是一项十分困难的操作。可以通过设置“dependency-check”来解决这个问题。
+    在应用程序的生命周期中，你可能不大愿意花时间验证所有Bean的属性是否按照上下文文件正确配置。
+    或者你宁可验证某个Bean的特定属性是否被正确设置。即使用“dependency-check”属性也不能很好地解决这个问题，在这种情况下你需要使用@Required 注解。
+    需要用如下的方式使用来标明Bean的设值方法。
+    public class EmployeeFactoryBean extends AbstractFactoryBean<Object> {
+       private String designation;
+       public String getDesignation() {
+          return designation;
+       }
+       @Required
+       public void setDesignation(String designation) {
+          this.designation = designation;
+       }
+    }
+
+    RequiredAnnotationBeanPostProcessor是Spring中的后置处理器，用来验证被@Required 注解的Bean属性是否被正确设置了。
+    在使用RequiredAnnotationBeanPostProcesso验证Bean属性之前，要在IOC容器中对其进行注册：
+    <bean class="org.springframework.beans.factory.annotation.RequiredAnnotationBeanPostProcessor" />
+
+    但是如果没有属性被用@Required注解过，后置处理器会抛出一个BeanInitializationException异常。
+
+20  请举例说明@Qualifier注解？
+    @Qualifier注解意味着可以在被标注Bean的字段上自动装配。Qualifier注解可以用来取消Spring不能取消的Bean应用。
+
+21  构造方法注入和设值注入有什么区别？
+    请注意以下明显的区别：
+    （1）设值注入方法支持大部分的依赖注入，如果我们仅需要注入int、string和long型的变量，不要用设值的方法注入。对于基本类型，如果我们没有注入，可以为基本类型设置默认值。构造方法注入不支持大部分依赖注入，因为在调用构造方法时必须传入正确的构造参数，否则会报错。
+    （2）设值注入不会重写构造方法的值。如果我们对同一个变量同时使用了构造方法注入和设值方法注入，那么构造方法将不能覆盖由设值方法注入的值。很明显，因为构造方法只在对象被创建时调用。
+    （3）在使用设值注入时有可能还不能保证某种依赖是否已经被注入，也就是说，这时对象的依赖关系有可能是不完整的。而在另一种情况下，构造器注入则不允许生成依赖关系不完整的对象。
+    （4）在设值注入时如果对象A和对象B互相依赖，在创建对象A时Spring会抛出sObjectCurrentlyInCreationException异常，因为在对象B被创建之前对象A是不能被创建的，反之亦然。Spring用设值注入的方法解决了循环依赖的问题，因为对象的设值方法是在对象被创建之前被调用的。
+
+22  Spring框架中有哪些不同类型的事件？
+    Spring的ApplicationContext 提供了支持事件和代码中监听器的功能。
+    我们可以创建Bean来监听在ApplicationContext 中发布的事件。ApplicationEvent类和在ApplicationContext接口中处理的事件，如果一个Bean实现了ApplicationListener接口，当一个ApplicationEvent 被发布以后，Bean会自动被通知。
+    public class AllApplicationEventListener implements ApplicationListener<ApplicationEvent> {
+       @Override
+       public void onApplicationEvent(ApplicationEvent applicationEvent) {
+          //process event
+       }
+    }
+
+    Spring 提供了以下5种标准的事件：
+    （1）上下文更新事件（ContextRefreshedEvent）：该事件会在ApplicationContext被初始化或者更新时发布。也可以在调用ConfigurableApplicationContext 接口中的refresh()方法时被触发。
+    （2）上下文开始事件（ContextStartedEvent）：当容器调用ConfigurableApplicationContext的Start()方法开始/重新开始容器时触发该事件。
+    （3）上下文停止事件（ContextStoppedEvent）：当容器调用ConfigurableApplicationContext的Stop()方法停止容器时触发该事件。
+    （4）上下文关闭事件（ContextClosedEvent）：当ApplicationContext被关闭时触发该事件。容器被关闭时，其管理的所有单例Bean都被销毁。
+    （5）请求处理事件（RequestHandledEvent）：在Web应用中，当一个HTTP请求（Request）结束时触发该事件。
+    除了上面介绍的事件，还可以通过扩展ApplicationEvent 类来开发自定义的事件。
+    public class CustomApplicationEvent extends ApplicationEvent {
+       public CustomApplicationEvent ( Object source, final String msg ){
+          super(source);
+          System.out.println("Created a Custom event");
+       }
+    }
+    为了监听这个事件，还需要创建一个监听器：
+    public class CustomEventListener implements ApplicationListener < CustomApplicationEvent >{
+       @Override
+       public void onApplicationEvent(CustomApplicationEvent applicationEvent) {
+       }
+    }
+
+    之后通过applicationContext接口的publishEvent()方法来发布自定义事件：
+    CustomApplicationEvent customEvent = new CustomApplicationEvent(applicationContext, “Test message”);
+    applicationContext.publishEvent(customEvent);
+
+23  FileSystemResource和ClassPathResource有何区别？
+    在FileSystemResource 中需要给出spring-config.xml文件在项目中的相对路径或者绝对路径。
+    在ClassPathResource中Spring会在ClassPath中自动搜寻配置文件，所以要把ClassPathResource 文件放在ClassPath下。
+    如果将spring-config.xml保存在了src文件夹下，只需给出配置文件的名称即可，因为src文件夹是默认的。
+    简而言之，ClassPathResource在环境变量中读取配置文件，FileSystemResource在配置文件中读取配置文件。
+
+24  Spring 框架中都用到了哪些设计模式？
+    Spring框架中使用了大量的设计模式，下面列举了比较有代表性的：
+    （1）代理模式：在AOP和remoting中被用得比较多。
+    （2）单例模式：在Spring配置文件中定义的Bean默认为单例模式。
+    （3）模板模式：用来解决代码重复的问题。比如RestTemplate、JmsTemplate、JpaTemplate。
+    （4）委派模式：Srping提供了DispatcherServlet来对请求进行分发。
+    （5）工厂模式：BeanFactory用来创建对象的实例，贯穿于BeanFactory / ApplicationContext接口的核心理念。
+    （6）代理模式：AOP思想的底层实现技术，Spring中采用JDK Proxy和CgLib类库。
+
+25  在Spring框架中如何更有效地使用JDBC？
+    使用Spring JDBC框架，资源管理及错误处理的代价都会减轻。
+    开发人员只需通过statements和queries语句从数据库中存取数据。Spring通过使用模板类能更有效地使用JDBC，也就是所谓的JdbcTemplate。
+
+26  请解释下Spring框架中的IOC容器？
+    Spring中的org.springframework.beans包和org.springframework.context包构成了Spring框架IOC容器的基础。
+    BeanFactory接口提供了一个先进的配置机制，使得任何类型的对象的配置都成为可能。
+    ApplicationContex接口对BeanFactory（是一个子接口）进行了扩展，在BeanFactory的基础上添加了其他功能，
+    比如与Spring的AOP更容易集成，也提供了处理Message Resource的机制（用于国际化）、事件传播及应用层的特别配置，比如针对Web应用的WebApplicationContext。
+
+27  在Spring中可以注入null或空字符串吗？
+    完全可以。
+
+1. 什么是spring?
+    Spring 是个java企业级应用的开源开发框架。Spring主要用来开发Java应用，但是有些扩展是针对构建J2EE平台的web应用。
+    Spring 框架目标是简化Java企业级应用开发，并通过POJO为基础的编程模型促进良好的编程习惯。
+
+2. 使用Spring框架的好处是什么？
+    轻量：Spring 是轻量的，基本的版本大约2MB。
+    控制反转：Spring通过控制反转实现了松散耦合，对象们给出它们的依赖，而不是创建或查找依赖的对象们。
+    面向切面的编程(AOP)：Spring支持面向切面的编程，并且把应用业务逻辑和系统服务分开。
+    容器：Spring 包含并管理应用中对象的生命周期和配置。
+    MVC框架：Spring的WEB框架是个精心设计的框架，是Web框架的一个很好的替代品。
+    事务管理：Spring 提供一个持续的事务管理接口，可以扩展到上至本地事务下至全局事务（JTA）。
+    异常处理：Spring 提供方便的API把具体技术相关的异常（比如由JDBC，Hibernate or JDO抛出的）转化为一致的unchecked 异常。
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

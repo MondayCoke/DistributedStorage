@@ -32,7 +32,7 @@ public class ZkSchedulerFactoryBean extends SchedulerFactoryBean {
     private CuratorFramework getClient(){
         CuratorFramework curatorFramework= CuratorFrameworkFactory
                 .builder()
-                .connectString("192.168.221.128:2181")
+                .connectString("47.107.45.58:2181")
                 .sessionTimeoutMs(15000)
                 .connectionTimeoutMs(20000)
                 .retryPolicy(new ExponentialBackoffRetry(1000,10))
